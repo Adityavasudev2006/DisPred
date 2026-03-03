@@ -1,0 +1,88 @@
+# ============================================================
+# Disaster Prediction - .gitignore
+# ============================================================
+
+# ---------------------------
+# Datasets (large image/data files)
+# ---------------------------
+data/flood_dataset/images/
+data/flood_dataset/masks/
+data/simulated_stream/
+data/twitter_data/
+
+# ---------------------------
+# ML Model Weights (large binary files)
+# ---------------------------
+# Twitter BERT model - model.safetensors is ~255 MB
+ml_models/twitter_model/model.safetensors
+
+# Flood U-Net model weights
+ml_models/flood_detection/flood_unet_cpu.pth
+
+# ---------------------------
+# Kafka Binary Distribution
+# (entire kafka/ folder is a Kafka install – hundreds of MBs of JARs)
+# ---------------------------
+kafka/libs/
+kafka/bin/
+kafka/logs/
+kafka/site-docs/
+
+# ---------------------------
+# Python cache & build artifacts
+# ---------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ---------------------------
+# Jupyter Notebook checkpoints
+# ---------------------------
+.ipynb_checkpoints/
+
+# ---------------------------
+# Virtual environments
+# ---------------------------
+venv/
+.venv/
+env/
+ENV/
+
+# ---------------------------
+# IDE & OS artifacts
+# ---------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---------------------------
+# Miscellaneous large/binary file types
+# ---------------------------
+*.bin
+*.safetensors
+*.pth
+*.pt
+*.onnx
+*.pkl
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.csv
+*.parquet
+*.feather
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.jar
+*.log

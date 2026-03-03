@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloodGuard AI · Command Center</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #060810;
+            --surface: #0d1117;
+            --surface2: #131820;
+            --border: rgba(255,255,255,0.06);
+            --border-bright: rgba(255,255,255,0.12);
+            --text: #e8eaf0;
+            --muted: #4a5568;
+            --subtle: #2d3748;
+            --red: #ff3b3b;
+            --red-dim: rgba(255,59,59,0.12);
+            --amber: #ffb020;
+            --amber-dim: rgba(255,176,32,0.12);
+            --green: #00d97e;
+            --green-dim: rgba(0,217,126,0.12);
+            --blue: #3b82f6;
+            --blue-dim: rgba(59,130,246,0.12);
+            --blue-glow: rgba(59,130,246,0.25);
+            --cyan: #00d4ff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.4;
+        }
+
+        .ambient {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .ambient-1 {
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+            top: -200px; left: -100px;
+        }
+        .ambient-2 {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(255,59,59,0.06) 0%, transparent 70%);
+            bottom: 0; right: 0;
+        }
+
+        .layout {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        /* ── TOPBAR ── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border);
+            background: rgba(6,8,16,0.85);
+            backdrop-filter: blur(20px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .logo { display: flex; align-items: center; gap: 0.75rem; }
+
+        .logo-mark {
+            width: 36px; height: 36px;
+            background: var(--blue);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+            box-shadow: 0 0 20px var(--blue-glow);
+        }
+
+        .logo-name { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.3px; }
+
+        .logo-sub {
+            font-size: 0.72rem;
+            color: var(--muted);
+            letter-spacing: 1px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .topbar-center { display: flex; align-items: center; gap: 0.5rem; }
+
+        .location-select {
+            background: var(--surface2);
+            border: 1px solid var(--border-bright);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 0.5rem 1rem;
+            font-family: 'IBM Plex Sans', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .location-select:hover { border-color: var(--blue); }
+
+        .topbar-right { display: flex; align-items: center; gap: 1rem; }
+
+        .live-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 100px;
+            border: 1px solid rgba(255,59,59,0.3);
+            background: rgba(255,59,59,0.08);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--red);
+            letter-spacing: 1px;
+        }
+
+        .pulse-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--red);
+            box-shadow: 0 0 8px var(--red);
+            animation: blink 1.5s ease-in-out infinite;
+        }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        .last-update {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--muted);
+        }
+
+        /* ── MAIN ── */
+        .main {
+            padding: 1.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* ── ALERT HERO ── */
+        .alert-hero {
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: background 0.6s ease, border-color 0.6s ease, box-shadow 0.6s ease;
+            position: relative;
+            overflow: hidden;
+            background: var(--surface);
+        }
+
+        .alert-hero.AWAITING {
+            background: var(--surface);
+            border-color: var(--border);
+        }
+        .alert-hero.HIGH {
+            background: linear-gradient(135deg, rgba(255,59,59,0.15) 0%, rgba(255,59,59,0.04) 100%);
+            border-color: rgba(255,59,59,0.4);
+            box-shadow: 0 0 60px rgba(255,59,59,0.12), inset 0 1px 0 rgba(255,59,59,0.2);
+        }
+        .alert-hero.MEDIUM {
+            background: linear-gradient(135deg, rgba(255,176,32,0.15) 0%, rgba(255,176,32,0.04) 100%);
+            border-color: rgba(255,176,32,0.4);
+            box-shadow: 0 0 60px rgba(255,176,32,0.12), inset 0 1px 0 rgba(255,176,32,0.2);
+        }
+        .alert-hero.LOW {
+            background: linear-gradient(135deg, rgba(0,217,126,0.12) 0%, rgba(0,217,126,0.03) 100%);
+            border-color: rgba(0,217,126,0.35);
+            box-shadow: 0 0 60px rgba(0,217,126,0.10), inset 0 1px 0 rgba(0,217,126,0.2);
+        }
+
+        .alert-left { display: flex; align-items: center; gap: 1.5rem; }
+
+        .alert-icon-wrap {
+            width: 64px; height: 64px;
+            border-radius: 18px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+            background: rgba(255,255,255,0.05);
+            transition: background 0.4s;
+        }
+        .HIGH  .alert-icon-wrap { background: rgba(255,59,59,0.18); }
+        .MEDIUM .alert-icon-wrap { background: rgba(255,176,32,0.18); }
+        .LOW   .alert-icon-wrap { background: rgba(0,217,126,0.15); }
+
+        .alert-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            letter-spacing: 2px;
+            color: var(--muted);
+            margin-bottom: 0.3rem;
+        }
+
+        .alert-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.5px;
+            color: var(--text);
+            transition: color 0.4s;
+        }
+        .HIGH  .alert-title { color: var(--red); }
+        .MEDIUM .alert-title { color: var(--amber); }
+        .LOW   .alert-title { color: var(--green); }
+
+        .alert-sub { font-size: 0.85rem; color: var(--muted); margin-top: 0.35rem; }
+
+        .alert-right { display: flex; align-items: center; }
+
+        .conf-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 1px;
+            color: var(--muted);
+            margin-bottom: 0.3rem;
+            text-align: right;
+        }
+
+        .conf-value {
+            font-size: 3rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--text);
+            transition: color 0.4s;
+            font-family: 'IBM Plex Mono', monospace;
+            text-align: right;
+        }
+        .HIGH  .conf-value { color: var(--red); }
+        .MEDIUM .conf-value { color: var(--amber); }
+        .LOW   .conf-value { color: var(--green); }
+
+        /* ── 3 SCORES ── */
+        .scores-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.2rem;
+        }
+
+        .score-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+        .score-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            border-radius: 2px 2px 0 0;
+        }
+        .score-card.flood::after  { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+        .score-card.weather::after{ background: linear-gradient(90deg, var(--amber), #ff6b35); }
+        .score-card.social::after { background: linear-gradient(90deg, #a855f7, var(--blue)); }
+        .score-card:hover { border-color: var(--border-bright); }
+
+        .score-header { display: flex; align-items: center; justify-content: space-between; }
+
+        .score-label-group { display: flex; align-items: center; gap: 0.6rem; }
+
+        .score-icon {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem;
+        }
+        .flood  .score-icon { background: var(--blue-dim); color: var(--blue); }
+        .weather .score-icon { background: var(--amber-dim); color: var(--amber); }
+        .social  .score-icon { background: rgba(168,85,247,0.12); color: #a855f7; }
+
+        .score-name {
+            font-size: 0.78rem;
+            color: var(--muted);
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 1px;
+        }
+
+        .score-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.63rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+        }
+        .score-badge.live   { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,59,59,0.2); }
+        .score-badge.static { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+        .score-main { display: flex; align-items: flex-end; gap: 0.6rem; }
+
+        .score-number {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -2px;
+        }
+        .flood  .score-number { color: var(--blue); }
+        .weather .score-number { color: var(--amber); }
+        .social  .score-number { color: #a855f7; }
+
+        .score-unit {
+            font-size: 1.1rem;
+            color: var(--muted);
+            padding-bottom: 0.5rem;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .score-bar-wrap { height: 5px; background: var(--surface2); border-radius: 6px; overflow: hidden; }
+
+        .score-bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.7s cubic-bezier(0.4,0,0.2,1);
+        }
+        .flood  .score-bar-fill { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+        .weather .score-bar-fill { background: linear-gradient(90deg, var(--amber), #ff6b35); }
+        .social  .score-bar-fill { background: linear-gradient(90deg, #a855f7, var(--blue)); }
+
+        .score-sublabel { font-size: 0.76rem; color: var(--muted); }
+
+        /* ── SHARED CARD ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 0.92rem;
+            font-weight: 600;
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text);
+        }
+        .card-title i { font-size: 0.82rem; opacity: 0.55; }
+
+        /* ── FLOOD ANALYTICS ROW ── */
+        .flood-analytics-grid {
+            display: grid;
+            grid-template-columns: 250px 2fr 1.1fr;
+            gap: 1.2rem;
+        }
+
+        .flood-stats-col {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 1.5rem;
+        }
+
+        .flood-mini-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.55rem;
+        }
+
+        .mini-stat {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 0.7rem;
+        }
+
+        .mini-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+            margin-bottom: 0.3rem;
+        }
+
+        .mini-val {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1;
+        }
+
+        .trend-chart-wrap { height: 190px; }
+
+        /* ── TIMELINE ── */
+        .timeline { display: flex; flex-direction: column; gap: 0.45rem; }
+
+        .timeline-item {
+            display: grid;
+            grid-template-columns: 95px 1fr 75px;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.55rem 0.75rem;
+            background: var(--surface2);
+            border-radius: 10px;
+        }
+
+        .timeline-time {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+        }
+
+        .timeline-bar-wrap { height: 5px; background: var(--surface); border-radius: 6px; overflow: hidden; }
+        .timeline-fill { height: 100%; border-radius: 6px; transition: width 0.5s ease; }
+
+        .timeline-val {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        /* ── LIVE FEED ── */
+        .filter-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .filter-btns { display: flex; gap: 0.4rem; }
+
+        .fbtn {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.3rem 0.75rem;
+            color: var(--muted);
+            font-size: 0.74rem;
+            cursor: pointer;
+            font-family: 'IBM Plex Sans', sans-serif;
+            transition: all 0.2s;
+        }
+        .fbtn:hover, .fbtn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+        .feed-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            max-height: 210px;
+            overflow-y: auto;
+        }
+        .feed-list::-webkit-scrollbar { width: 3px; }
+        .feed-list::-webkit-scrollbar-track { background: transparent; }
+        .feed-list::-webkit-scrollbar-thumb { background: var(--subtle); border-radius: 3px; }
+
+        .feed-row {
+            display: grid;
+            grid-template-columns: 1fr 65px 80px 75px;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.75rem;
+            background: var(--surface2);
+            border-radius: 10px;
+            animation: slideIn 0.35s ease;
+            transition: background 0.2s;
+        }
+        .feed-row:hover { background: rgba(255,255,255,0.04); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-8px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        .feed-file {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.69rem;
+            color: var(--muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .feed-flood {
+            font-weight: 600;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+            text-align: right;
+        }
+
+        .feed-badge {
+            font-size: 0.63rem;
+            padding: 0.18rem 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .badge-HIGH   { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(255,59,59,0.2); }
+        .badge-MEDIUM { background: var(--amber-dim);  color: var(--amber); border: 1px solid rgba(255,176,32,0.2); }
+        .badge-LOW    { background: var(--green-dim);  color: var(--green); border: 1px solid rgba(0,217,126,0.2); }
+
+        .feed-time {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.63rem;
+            color: var(--muted);
+            text-align: right;
+        }
+
+        .feed-empty {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-family: 'IBM Plex Mono', monospace;
+            padding: 0.5rem 0;
+        }
+
+        /* ── 2-COL LOWER ── */
+        .lower-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.2rem;
+        }
+
+        /* ── WEATHER ── */
+        .weather-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.65rem;
+            margin-bottom: 1rem;
+        }
+
+        .weather-cell {
+            background: var(--surface2);
+            border-radius: 12px;
+            padding: 0.75rem;
+        }
+
+        .weather-cell-label {
+            font-size: 0.68rem;
+            color: var(--muted);
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.15rem;
+        }
+
+        .weather-cell-sub {
+            font-size: 0.6rem;
+            color: var(--subtle);
+            font-family: 'IBM Plex Mono', monospace;
+            margin-bottom: 0.3rem;
+        }
+
+        .weather-cell-val {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.35rem;
+            font-weight: 700;
+        }
+
+        .weather-risk-box {
+            background: var(--surface2);
+            border-radius: 12px;
+            padding: 0.8rem 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .weather-risk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .rain-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem; }
+        .rain-chart-wrap { height: 70px; }
+
+        /* ── SOCIAL ── */
+        .social-meter { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+
+        .social-count {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #a855f7;
+        }
+
+        .social-label { font-size: 0.78rem; color: var(--muted); }
+
+        .tweet-list { display: flex; flex-direction: column; gap: 0.55rem; }
+
+        .tweet {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.78rem;
+            color: var(--muted);
+            border-left: 2px solid #a855f7;
+            line-height: 1.45;
+        }
+
+        .tweet-author {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.63rem;
+            color: #a855f7;
+            margin-bottom: 0.2rem;
+        }
+
+        .no-data-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+            color: var(--muted);
+            padding: 0.5rem 0;
+        }
+
+        /* ── SYSTEM STATUS ── */
+        .sys-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.55rem;
+        }
+
+        .sys-item {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 0.7rem 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .sys-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .sys-dot.ok   { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .sys-dot.warn { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+        .sys-text { font-size: 0.76rem; }
+        .sys-text strong { display: block; font-weight: 500; color: var(--text); }
+        .sys-text span   { color: var(--muted); font-size: 0.68rem; font-family: 'IBM Plex Mono', monospace; }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 1280px) {
+            .flood-analytics-grid { grid-template-columns: 1fr 1fr; }
+            .flood-analytics-grid > *:last-child { grid-column: 1/-1; }
+            .lower-grid { grid-template-columns: 1fr; }
+            .sys-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 900px) {
+            .scores-row { grid-template-columns: 1fr; }
+            .flood-analytics-grid { grid-template-columns: 1fr; }
+            .lower-grid { grid-template-columns: 1fr; }
+            .sys-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient ambient-1"></div>
+    <div class="ambient ambient-2"></div>
+
+    <div class="layout">
+        <!-- TOPBAR -->
+        <nav class="topbar">
+            <div class="logo">
+                <div class="logo-mark">🛡</div>
+                <div>
+                    <div class="logo-name">FloodGuard AI</div>
+                    <div class="logo-sub">COMMAND CENTER v2.0</div>
+                </div>
+            </div>
+
+            <div class="topbar-center">
+                <i class="fas fa-map-marker-alt" style="color:var(--blue);font-size:0.85rem;"></i>
+                <select class="location-select" id="locationSelect" onchange="onLocationChange()">
+                    <option value="Chennai">Chennai, Tamil Nadu</option>
+                    <option value="Mumbai">Mumbai, Maharashtra</option>
+                    <option value="Kolkata">Kolkata, West Bengal</option>
+                    <option value="Kochi">Kochi, Kerala</option>
+                    <option value="Guwahati">Guwahati, Assam</option>
+                    <option value="Hyderabad">Hyderabad, Telangana</option>
+                </select>
+            </div>
+
+            <div class="topbar-right">
+                <div class="last-update">Updated: <span id="lastUpdate">--:--:--</span></div>
+                <div class="live-pill"><span class="pulse-dot"></span>LIVE</div>
+            </div>
+        </nav>
+
+        <div class="main">
+
+            <!-- ROW 1: ALERT HERO -->
+            <div class="alert-hero AWAITING" id="alertHero">
+                <div class="alert-left">
+                    <div class="alert-icon-wrap">
+                        <span id="alertEmoji">⏳</span>
+                    </div>
+                    <div>
+                        <div class="alert-label">CURRENT THREAT LEVEL</div>
+                        <div class="alert-title" id="alertTitle">AWAITING DATA...</div>
+                        <div class="alert-sub" id="alertSub">No predictions received yet · <span id="alertLocation">Chennai</span></div>
+                    </div>
+                </div>
+                <div class="alert-right">
+                    <div>
+                        <div class="conf-label">COMPOSITE SCORE</div>
+                        <div class="conf-value" id="compositeScore">—</div>
+                        <div class="conf-label" style="margin-top:0.25rem;">/ 100</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 2: 3 SCORES -->
+            <div class="scores-row">
+                <!-- Flood Score — REAL-TIME -->
+                <div class="score-card flood">
+                    <div class="score-header">
+                        <div class="score-label-group">
+                            <div class="score-icon"><i class="fas fa-water"></i></div>
+                            <div class="score-name">FLOOD SCORE</div>
+                        </div>
+                        <span class="score-badge live">● LIVE</span>
+                    </div>
+                    <div class="score-main">
+                        <div class="score-number" id="floodScore">0</div>
+                        <div class="score-unit">%</div>
+                    </div>
+                    <div class="score-bar-wrap">
+                        <div class="score-bar-fill" id="floodBar" style="width:0%"></div>
+                    </div>
+                    <div class="score-sublabel">AI image analysis · updating live</div>
+                </div>
+
+                <!-- Weather Score — no mock data -->
+                <div class="score-card weather">
+                    <div class="score-header">
+                        <div class="score-label-group">
+                            <div class="score-icon"><i class="fas fa-cloud-rain"></i></div>
+                            <div class="score-name">WEATHER SCORE</div>
+                        </div>
+                        <span class="score-badge static">SIMULATED</span>
+                    </div>
+                    <div class="score-main">
+                        <div class="score-number" id="weatherScore">—</div>
+                        <div class="score-unit">/ 100</div>
+                    </div>
+                    <div class="score-bar-wrap">
+                        <div class="score-bar-fill" id="weatherBar" style="width:0%"></div>
+                    </div>
+                    <div class="score-sublabel">Computed from rainfall + humidity + forecast</div>
+                </div>
+
+                <!-- Social Score — no mock data -->
+                <div class="score-card social">
+                    <div class="score-header">
+                        <div class="score-label-group">
+                            <div class="score-icon"><i class="fab fa-twitter"></i></div>
+                            <div class="score-name">SOCIAL SCORE</div>
+                        </div>
+                        <span class="score-badge static">SIMULATED</span>
+                    </div>
+                    <div class="score-main">
+                        <div class="score-number" id="socialScore">—</div>
+                        <div class="score-unit">/ 100</div>
+                    </div>
+                    <div class="score-bar-wrap">
+                        <div class="score-bar-fill" id="socialBar" style="width:0%"></div>
+                    </div>
+                    <div class="score-sublabel">No data yet</div>
+                </div>
+            </div>
+
+            <!-- ROW 3: FLOOD ANALYTICS -->
+            <div class="flood-analytics-grid">
+
+                <!-- Flood Mini Stats -->
+                <div class="flood-stats-col">
+                    <div class="card-title" style="margin-bottom:1rem;">
+                        <i class="fas fa-water"></i> Flood Analytics
+                    </div>
+                    <div class="flood-mini-grid">
+                        <div class="mini-stat">
+                            <div class="mini-label">TOTAL IMAGES</div>
+                            <div class="mini-val" id="statTotal">0</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-label">AVG FLOOD %</div>
+                            <div class="mini-val" id="statAvg" style="color:var(--blue)">—</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-label">HIGH RISK</div>
+                            <div class="mini-val" id="statHigh" style="color:var(--red)">0</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-label">MEDIUM RISK</div>
+                            <div class="mini-val" id="statMedium" style="color:var(--amber)">0</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-label">LOW RISK</div>
+                            <div class="mini-val" id="statLow" style="color:var(--green)">0</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-label">LAST IMAGE</div>
+                            <div class="mini-val" id="statLast" style="color:var(--muted);font-size:0.7rem;word-break:break-all;">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Flood Trend -->
+                <div class="card">
+                    <div class="card-title" style="margin-bottom:0.75rem;">
+                        <i class="fas fa-chart-line"></i> Flood Trend — Live
+                        <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:0.63rem;color:var(--red);">— 70% threshold</span>
+                    </div>
+                    <div class="trend-chart-wrap">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Alert History -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-history"></i> Alert History</div>
+                    <div class="timeline" id="historyList">
+                        <div class="no-data-label">⏳ Waiting for predictions...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 4: LIVE IMAGE FEED -->
+            <div class="card">
+                <div class="filter-strip">
+                    <div class="card-title" style="margin-bottom:0;">
+                        <i class="fas fa-bolt"></i> Live Image Feed
+                    </div>
+                    <div class="filter-btns">
+                        <button class="fbtn active" onclick="filterFeed('all',this)">All</button>
+                        <button class="fbtn" onclick="filterFeed('HIGH',this)">High</button>
+                        <button class="fbtn" onclick="filterFeed('MEDIUM',this)">Med</button>
+                        <button class="fbtn" onclick="filterFeed('LOW',this)">Low</button>
+                    </div>
+                </div>
+                <div class="feed-list" id="feedList">
+                    <div class="feed-empty" id="feedEmpty">⏳ No predictions yet. Waiting for stream...</div>
+                </div>
+            </div>
+
+            <!-- ROW 5: WEATHER + SOCIAL -->
+            <div class="lower-grid">
+
+                <!-- Weather Panel -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-cloud-sun-rain"></i> Weather Panel</div>
+
+                    <div class="weather-grid">
+                        <div class="weather-cell">
+                            <div class="weather-cell-label">RAINFALL LAST 1H</div>
+                            <div class="weather-cell-sub">Current intensity</div>
+                            <div class="weather-cell-val" id="w-1h" style="color:var(--amber)">—</div>
+                        </div>
+                        <div class="weather-cell">
+                            <div class="weather-cell-label">RAINFALL LAST 24H</div>
+                            <div class="weather-cell-sub">Accumulated rain</div>
+                            <div class="weather-cell-val" id="w-24h" style="color:var(--amber)">—</div>
+                        </div>
+                        <div class="weather-cell">
+                            <div class="weather-cell-label">FORECAST 6H</div>
+                            <div class="weather-cell-sub">Incoming risk</div>
+                            <div class="weather-cell-val" id="w-fc" style="color:var(--red)">—</div>
+                        </div>
+                        <div class="weather-cell">
+                            <div class="weather-cell-label">HUMIDITY</div>
+                            <div class="weather-cell-sub">Saturation indicator</div>
+                            <div class="weather-cell-val" id="w-hum" style="color:var(--text)">—</div>
+                        </div>
+                    </div>
+
+                    <div class="weather-risk-box">
+                        <div class="weather-risk-header">
+                            <span style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--muted);letter-spacing:1px;">WEATHER RISK SCORE</span>
+                            <span style="font-family:'IBM Plex Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--muted);" id="weatherRiskScore">— / 100</span>
+                        </div>
+                        <div class="score-bar-wrap">
+                            <div id="weatherRiskBar" style="height:100%;width:0%;border-radius:6px;background:linear-gradient(90deg,var(--amber),#ff6b35);transition:width 0.7s cubic-bezier(0.4,0,0.2,1);"></div>
+                        </div>
+                        <div style="font-size:0.68rem;color:var(--muted);margin-top:0.4rem;">Computed from rainfall intensity + accumulation + humidity + forecast</div>
+                    </div>
+
+                    <div class="rain-label">Hourly rainfall (last 6h)</div>
+                    <div class="rain-chart-wrap">
+                        <canvas id="rainChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Social Panel -->
+                <div class="card">
+                    <div class="card-title"><i class="fab fa-twitter"></i> Social Media Activity</div>
+
+                    <div class="social-meter">
+                        <div class="social-count" id="socialTweetCount">—</div>
+                        <div class="social-label">flood-related posts<br>in last hour</div>
+                    </div>
+
+                    <div class="tweet-list" id="tweetList">
+                        <div class="no-data-label">No social data yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 6: SYSTEM STATUS -->
+            <div class="card">
+                <div class="card-title"><i class="fas fa-server"></i> System Status</div>
+                <div class="sys-grid">
+                    <div class="sys-item">
+                        <span class="sys-dot ok"></span>
+                        <div class="sys-text">
+                            <strong>UNet Model</strong>
+                            <span>ACTIVE</span>
+                        </div>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-dot ok"></span>
+                        <div class="sys-text">
+                            <strong>Spark Stream</strong>
+                            <span>CONNECTED</span>
+                        </div>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-dot ok"></span>
+                        <div class="sys-text">
+                            <strong>Data Feed</strong>
+                            <span id="dataFreshness">Waiting...</span>
+                        </div>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-dot warn"></span>
+                        <div class="sys-text">
+                            <strong>Weather API</strong>
+                            <span>SIMULATED</span>
+                        </div>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-dot warn"></span>
+                        <div class="sys-text">
+                            <strong>Social API</strong>
+                            <span>SIMULATED</span>
+                        </div>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-dot ok"></span>
+                        <div class="sys-text">
+                            <strong>Watching: simulated_stream/</strong>
+                            <span>Processed: <span id="totalProc">0</span> images</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /main -->
+    </div><!-- /layout -->
+
+    <script>
+    // ═══════════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════════
+    const S = {
+        results: [],
+        floodReadings: [],
+        highCount: 0, medCount: 0, lowCount: 0,
+        totalImages: 0,
+        historyEntries: [],
+        currentFilter: 'all',
+        trendChart: null,
+        rainChart: null,
+        floodPrev: 0,
+        socketConnected: false,
+        freshnessTimer: null,
+        pollTimer: null,
+        latestWeather: 0,
+        latestSocial: 0,
+        
+    };
+
+    const COLORS = { HIGH:'#ff3b3b', MEDIUM:'#ffb020', LOW:'#00d97e' };
+
+    const ALERT_CFG = {
+        HIGH:   { emoji:'⚠️', title:'HIGH RISK — FLOOD ALERT',      sub:'Immediate action recommended' },
+        MEDIUM: { emoji:'🟡', title:'MODERATE RISK — WATCH ACTIVE',  sub:'Monitor situation closely'   },
+        LOW:    { emoji:'✅', title:'LOW RISK — ALL CLEAR',           sub:'Conditions normal'           },
+    };
+
+    // Weather Risk Score formula (0-100)
+    // All dashes until real data arrives — formula runs when data provided
+    function computeWeatherRisk(r1h, r24h, fc6h, hum) {
+        const a = Math.min(r1h  / 100 * 100, 100);
+        const b = Math.min(r24h / 300 * 100, 100);
+        const c = Math.min(fc6h / 100 * 100, 100);
+        const d = Math.max(0, (hum - 60) / 40 * 100);
+        return Math.round(a * 0.35 + b * 0.30 + c * 0.20 + d * 0.15);
+    }
+
+    function updateWeatherPanel(data) {
+
+    // Update score card
+    document.getElementById('weatherScore').textContent = data.weather_score;
+    document.getElementById('weatherBar').style.width = data.weather_score + '%';
+
+    // Update detailed panel
+    document.getElementById('w-1h').textContent  = data.rainfall_last_1h + ' mm';
+    document.getElementById('w-24h').textContent = data.rainfall_last_24h + ' mm';
+    document.getElementById('w-fc').textContent  = data.forecast_rain_6h + ' mm';
+    document.getElementById('w-hum').textContent = data.humidity + ' %';
+
+    document.getElementById('weatherRiskScore').textContent =
+        data.weather_score + ' / 100';
+
+    document.getElementById('weatherRiskBar').style.width =
+        data.weather_score + '%';
+}
+    
+    function updateSocialPanel(data) {
+
+    // Score card
+    document.getElementById('socialScore').textContent = data.twitter_score;
+    document.getElementById('socialBar').style.width = data.twitter_score + '%';
+
+    // Increment tweet count
+    const countEl = document.getElementById('socialTweetCount');
+    let count = parseInt(countEl.textContent) || 0;
+    countEl.textContent = count + 1;
+
+    // Add tweet to list (top)
+    const list = document.getElementById('tweetList');
+
+    const div = document.createElement('div');
+    div.className = 'tweet';
+    div.innerHTML = `
+        <div class="tweet-author">${data.emoji} ${data.risk}</div>
+        ${data.text}
+    `;
+
+    list.insertBefore(div, list.firstChild);
+
+    // Keep only last 6 tweets
+    while (list.children.length > 6) {
+        list.removeChild(list.lastChild);
+    }
+}
+    // ═══════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════
+    window.onload = () => {
+        initTrendChart();
+        initRainChart();
+        startClock();
+        connectSocket();
+    };
+
+    function startClock() {
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        setInterval(() => {
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        }, 1000);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SOCKET.IO  +  POLLING FALLBACK
+    // ═══════════════════════════════════════════════════════════
+    function connectSocket() {
+        try {
+            const socket = io({ timeout: 3000, reconnectionAttempts: 4 });
+
+            socket.on('connect', () => {
+                S.socketConnected = true;
+                console.log('[FloodGuard] Socket.IO connected');
+                stopPoll();                          // don't need polling when socket works
+                loadInitialResults();
+                startStatsPolling();                 // still poll /api/stats for counts
+            });
+
+            socket.on('new_prediction', (data) => {
+                processPrediction(data);
+            });
+
+            socket.on('new_weather_prediction', (data) => {
+                S.latestWeather = data.weather_score; 
+                updateWeatherPanel(data);
+            });
+
+            socket.on('new_twitter_prediction', (data) => {
+                S.latestSocial = data.twitter_score;
+                updateSocialPanel(data);
+            });
+
+            socket.on('connect_error', () => {
+                if (!S.socketConnected) startPoll();
+            });
+
+            socket.on('disconnect', () => {
+                S.socketConnected = false;
+                startPoll();
+            });
+
+            // 4 second grace period then fall back
+            setTimeout(() => { if (!S.socketConnected) startPoll(); }, 4000);
+
+        } catch (e) {
+            startPoll();
+        }
+    }
+
+    // Load historical results on first connect
+    function loadInitialResults() {
+        fetch('/api/results')
+            .then(r => r.json())
+            .then(data => {
+                if (!Array.isArray(data)) return;
+                // Process oldest first so feed shows latest at top
+                data.slice().reverse().forEach(d => processPrediction(d));
+            })
+            .catch(() => {});
+    }
+
+    // Poll /api/results every 3 seconds when no socket
+    function startPoll() {
+        if (S.pollTimer) return;
+        console.log('[FloodGuard] Polling /api/results every 3s');
+        let lastSeen = '';
+
+        const poll = () => {
+            fetch('/api/results')
+                .then(r => r.json())
+                .then(data => {
+                    if (!Array.isArray(data) || data.length === 0) return;
+                    // Only process items newer than lastSeen
+                    const newest = data[0]; // server returns newest first
+                    const key = newest.filename + newest.timestamp;
+                    if (key === lastSeen) return;
+                    lastSeen = key;
+                    // Find how many are new
+                    const newItems = [];
+                    for (const item of data) {
+                        if (item.filename + item.timestamp === lastSeen && newItems.length > 0) break;
+                        newItems.push(item);
+                    }
+                    // Process newest last so feed order is correct
+                    newItems.reverse().forEach(d => processPrediction(d));
+                })
+                .catch(() => {});
+
+            // Also fetch stats
+            fetch('/api/stats')
+                .then(r => r.json())
+                .then(stats => syncServerStats(stats))
+                .catch(() => {});
+        };
+
+        poll(); // immediate first call
+        S.pollTimer = setInterval(poll, 3000);
+    }
+
+    function stopPoll() {
+        if (S.pollTimer) { clearInterval(S.pollTimer); S.pollTimer = null; }
+    }
+
+    // Poll stats when socket is connected
+    function startStatsPolling() {
+        const poll = () => {
+            fetch('/api/stats')
+                .then(r => r.json())
+                .then(stats => syncServerStats(stats))
+                .catch(() => {});
+        };
+        poll();
+        setInterval(poll, 3000);
+    }
+
+    function syncServerStats(stats) {
+        if (!stats || stats.total === undefined) return;
+        S.totalImages = stats.total;
+        S.highCount   = stats.high_risk   || 0;
+        S.medCount    = stats.medium_risk  || 0;
+        S.lowCount    = stats.low_risk     || 0;
+        renderFloodStats();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CORE: process one prediction
+    // ═══════════════════════════════════════════════════════════
+    function processPrediction(d) {
+        // Normalise
+        d.risk  = (d.risk || '').toUpperCase();
+        d.flood = Math.min(100, Math.max(0, parseFloat(d.flood) || 0));
+        if (!['HIGH','MEDIUM','LOW'].includes(d.risk)) {
+            d.risk = d.flood >= 70 ? 'HIGH' : d.flood >= 40 ? 'MEDIUM' : 'LOW';
+        }
+        if (!d.timestamp) {
+            d.timestamp = new Date().toLocaleTimeString('en-US',
+                { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+        }
+        if (!d.filename) d.filename = `img_${Math.floor(Math.random()*9000+1000)}.jpg`;
+
+        // Dedup by filename+timestamp
+        const key = d.filename + d.timestamp;
+        if (S.results.some(r => r.filename + r.timestamp === key)) return;
+
+        S.results.unshift(d);
+        if (S.results.length > 200) S.results.pop();
+
+        S.totalImages++;
+        S.floodReadings.push(d.flood);
+        if (S.floodReadings.length > 100) S.floodReadings.shift();
+
+        if (d.risk === 'HIGH') S.highCount++;
+        else if (d.risk === 'MEDIUM') S.medCount++;
+        else S.lowCount++;
+
+        // Update all panels
+        animFloodScore(d.flood);
+        renderFloodStats();
+        updateTrendChart(d);
+        addHistoryEntry(d);
+        addFeedRow(d);
+        updateAlert(d.risk, d.flood);
+        resetFreshness();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FLOOD SCORE — smooth animation
+    // ═══════════════════════════════════════════════════════════
+    function animFloodScore(to) {
+        const from = S.floodPrev;
+        S.floodPrev = to;
+        const dur = 600;
+        const t0  = performance.now();
+        const el  = document.getElementById('floodScore');
+        const bar = document.getElementById('floodBar');
+
+        const step = (now) => {
+            const p    = Math.min((now - t0) / dur, 1);
+            const ease = 1 - Math.pow(1 - p, 3);
+            const val  = Math.round(from + (to - from) * ease);
+            el.textContent       = val;
+            bar.style.width      = val + '%';
+            if (p < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FLOOD STATS
+    // ═══════════════════════════════════════════════════════════
+    function renderFloodStats() {
+        const avg = S.floodReadings.length
+            ? (S.floodReadings.reduce((a,b) => a+b, 0) / S.floodReadings.length).toFixed(1)
+            : null;
+
+        document.getElementById('statTotal').textContent  = S.totalImages;
+        document.getElementById('statAvg').textContent    = avg !== null ? avg + '%' : '—';
+        document.getElementById('statHigh').textContent   = S.highCount;
+        document.getElementById('statMedium').textContent = S.medCount;
+        document.getElementById('statLow').textContent    = S.lowCount;
+        document.getElementById('totalProc').textContent  = S.totalImages;
+
+        if (S.results.length > 0) {
+            document.getElementById('statLast').textContent = S.results[0].filename;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ALERT HERO
+    // ═══════════════════════════════════════════════════════════
+    function updateAlert(floodRiskLabel, floodScore) {
+
+    // Compute FINAL COMPOSITE SCORE
+    const composite =
+        floodScore * 0.5 +
+        S.latestWeather * 0.3 +
+        S.latestSocial * 0.2;
+
+    const finalScore = Math.round(composite);
+
+    // Classify FINAL alert level
+    let finalRisk = 'LOW';
+    if (finalScore >= 70) finalRisk = 'HIGH';
+    else if (finalScore >= 40) finalRisk = 'MEDIUM';
+
+    const cfg = ALERT_CFG[finalRisk];
+
+    // Update alert hero
+    const hero = document.getElementById('alertHero');
+    hero.className = `alert-hero ${finalRisk}`;
+    document.getElementById('alertEmoji').textContent = cfg.emoji;
+    document.getElementById('alertTitle').textContent = cfg.title;
+    document.getElementById('alertSub').innerHTML =
+        `${cfg.sub} · <span id="alertLocation">${document.getElementById('locationSelect').value}</span>`;
+
+    // Animate composite score
+    const el = document.getElementById('compositeScore');
+    const from = parseInt(el.textContent) || 0;
+    const dur = 600;
+    const t0 = performance.now();
+
+    const step = (now) => {
+        const p = Math.min((now - t0) / dur, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(from + (finalScore - from) * ease);
+        if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+}
+    // ═══════════════════════════════════════════════════════════
+    // TREND CHART
+    // ═══════════════════════════════════════════════════════════
+    function updateTrendChart(d) {
+        const chart = S.trendChart;
+        if (!chart) return;
+        if (chart.data.labels.length >= 20) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+            chart.data.datasets[1].data.shift();
+        }
+        chart.data.labels.push(d.timestamp);
+        chart.data.datasets[0].data.push(d.flood);
+        chart.data.datasets[1].data.push(70);
+        chart.update('none');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ALERT HISTORY
+    // ═══════════════════════════════════════════════════════════
+    function addHistoryEntry(d) {
+        S.historyEntries.unshift(d);
+        if (S.historyEntries.length > 8) S.historyEntries.pop();
+
+        const list = document.getElementById('historyList');
+        list.innerHTML = '';
+        S.historyEntries.forEach(e => {
+            const div = document.createElement('div');
+            div.className = 'timeline-item';
+            div.innerHTML = `
+                <div class="timeline-time">${e.timestamp}</div>
+                <div class="timeline-bar-wrap">
+                    <div class="timeline-fill" style="width:${e.flood}%;background:${COLORS[e.risk]}"></div>
+                </div>
+                <div class="timeline-val" style="color:${COLORS[e.risk]}">${e.flood}%</div>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // LIVE FEED
+    // ═══════════════════════════════════════════════════════════
+    function addFeedRow(d) {
+        const list  = document.getElementById('feedList');
+        const empty = document.getElementById('feedEmpty');
+        if (empty) empty.remove();
+
+        const div = document.createElement('div');
+        div.className = 'feed-row';
+        div.setAttribute('data-risk', d.risk);
+        if (S.currentFilter !== 'all' && S.currentFilter !== d.risk) div.style.display = 'none';
+
+        div.innerHTML = `
+            <div class="feed-file"><i class="far fa-image" style="margin-right:5px;color:#4a658a;"></i>${d.filename}</div>
+            <div class="feed-flood" style="color:${COLORS[d.risk]}">${d.flood}%</div>
+            <div class="feed-badge badge-${d.risk}">${d.risk}</div>
+            <div class="feed-time">${d.timestamp}</div>
+        `;
+
+        list.insertBefore(div, list.firstChild);
+        while (list.children.length > 60) list.removeChild(list.lastChild);
+    }
+
+    function filterFeed(risk, btn) {
+        S.currentFilter = risk;
+        document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.feed-row').forEach(row => {
+            row.style.display = (risk === 'all' || row.getAttribute('data-risk') === risk) ? 'grid' : 'none';
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DATA FRESHNESS
+    // ═══════════════════════════════════════════════════════════
+    function resetFreshness() {
+        if (S.freshnessTimer) clearInterval(S.freshnessTimer);
+        document.getElementById('dataFreshness').textContent = 'Just now';
+        let sec = 0;
+        S.freshnessTimer = setInterval(() => {
+            sec++;
+            document.getElementById('dataFreshness').textContent =
+                sec < 60 ? `${sec}s ago` : `${Math.floor(sec/60)}m ago`;
+        }, 1000);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // LOCATION CHANGE
+    // ═══════════════════════════════════════════════════════════
+    function onLocationChange() {
+        const loc  = document.getElementById('locationSelect').value;
+        const span = document.getElementById('alertLocation');
+        if (span) span.textContent = loc;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CHART INIT
+    // ═══════════════════════════════════════════════════════════
+    function initTrendChart() {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        S.trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Flood %',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: (c) => {
+                            const g = c.chart.ctx.createLinearGradient(0,0,0,190);
+                            g.addColorStop(0,'rgba(59,130,246,0.25)');
+                            g.addColorStop(1,'rgba(59,130,246,0.01)');
+                            return g;
+                        },
+                        borderWidth: 2.5,
+                        pointRadius: 3.5,
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#0d1117',
+                        pointBorderWidth: 1.5,
+                        tension: 0.4,
+                        fill: true,
+                    },
+                    {
+                        label: 'Threshold',
+                        data: [],
+                        borderColor: 'rgba(255,59,59,0.55)',
+                        borderWidth: 1.5,
+                        borderDash: [5,4],
+                        pointRadius: 0,
+                        fill: false,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index', intersect: false,
+                        backgroundColor: '#0d1117',
+                        borderColor: '#1e293b', borderWidth: 1,
+                        titleColor: '#94a3b8', bodyColor: '#e8eaf0',
+                        titleFont: { family: 'IBM Plex Mono', size: 10 },
+                        bodyFont:  { family: 'IBM Plex Mono', size: 11 },
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true, max: 100,
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                        ticks: { color: '#4a5568', font: { family:'IBM Plex Mono', size:10 }, stepSize: 25 },
+                        border: { color: 'transparent' },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#4a5568', font: { family:'IBM Plex Mono', size:9 }, maxRotation: 0, maxTicksLimit: 8 },
+                        border: { color: 'transparent' },
+                    }
+                }
+            }
+        });
+    }
+
+    function initRainChart() {
+        // Rain chart shows dashes (no data) — will be populated when weather API connects
+        const ctx = document.getElementById('rainChart').getContext('2d');
+        S.rainChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['-6h','-5h','-4h','-3h','-2h','-1h'],
+                datasets: [{
+                    data: [0,0,0,0,0,0],
+                    backgroundColor: 'rgba(255,176,32,0.15)',
+                    borderColor: 'rgba(255,176,32,0.3)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 0 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#0d1117', bodyColor: '#e8eaf0',
+                        borderColor: '#1e293b', borderWidth: 1,
+                        bodyFont: { family: 'IBM Plex Mono', size: 10 },
+                    }
+                },
+                scales: {
+                    y: { grid: { color:'rgba(255,255,255,0.04)' }, ticks: { color:'#4a5568', font:{ family:'IBM Plex Mono', size:9 } }, border: { color:'transparent' } },
+                    x: { grid: { display:false }, ticks: { color:'#4a5568', font:{ family:'IBM Plex Mono', size:9 } }, border: { color:'transparent' } }
+                }
+            }
+        });
+    }
+    </script>
+</body>
+</html>
