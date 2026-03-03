@@ -14,8 +14,7 @@ Leveraging **Apache Kafka**, **Spark Structured Streaming**, and **Deep Learning
 ## 🏗 System Architecture
 The system is designed with scalability, modularity, and fault tolerance in mind. It uses a decoupled microservices approach where `analysis.py` acts as the primary orchestrator.
 
-![System Architecture](architecture.png)
-*(Place your architecture.png file in the root directory)*
+![System Architecture](repo_utilities/system_architecture.png)
 
 ### End-to-End Data Flow
 1.  **Ingestion:** 
