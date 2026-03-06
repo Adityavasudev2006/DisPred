@@ -1,4 +1,4 @@
-# Real-Time Disaster Prediction System
+# DisPred : Real-Time Disaster Prediction System
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue?style=for-the-badge&logo=python)
 ![Apache Spark](https://img.shields.io/badge/Apache_Spark-Streaming-orange?style=for-the-badge&logo=apachespark)
